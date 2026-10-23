@@ -2,3 +2,7 @@
 .gitignore
 node_modules
 npm-debug.log*
+services/*/node_modules
+services/*/npm-debug.log*
+coverage
+services/*/coverage

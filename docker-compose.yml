@@ -1,0 +1,99 @@
+services:
+  users-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo_users
+      POSTGRES_PASSWORD: demo_users_password
+      POSTGRES_DB: users
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo_users -d users"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - users-data:/var/lib/postgresql/data
+
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo_orders
+      POSTGRES_PASSWORD: demo_orders_password
+      POSTGRES_DB: orders
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo_orders -d orders"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+
+  event-broker:
+    image: nats:2.11-alpine
+    command: ["-m", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  user-service:
+    build: ./services/user-service
+    environment:
+      APP_ENV: development
+      DB_HOST: users-db
+      DB_PORT: "5432"
+      DB_USER: demo_users
+      DB_PASSWORD: demo_users_password
+      DB_NAME: users
+    depends_on:
+      users-db:
+        condition: service_healthy
+
+  order-service:
+    build: ./services/order-service
+    environment:
+      APP_ENV: development
+      DB_HOST: orders-db
+      DB_PORT: "5432"
+      DB_USER: demo_orders
+      DB_PASSWORD: demo_orders_password
+      DB_NAME: orders
+      USER_SERVICE_URL: http://user-service:8080
+      NATS_URL: nats://event-broker:4222
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      event-broker:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+
+  notification-service:
+    build: ./services/notification-service
+    environment:
+      APP_ENV: development
+      NATS_URL: nats://event-broker:4222
+    depends_on:
+      event-broker:
+        condition: service_healthy
+
+  hello-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: development
+      USER_SERVICE_URL: http://user-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    depends_on:
+      user-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
+volumes:
+  users-data:
+  orders-data:

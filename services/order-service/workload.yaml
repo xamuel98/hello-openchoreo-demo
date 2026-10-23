@@ -1,0 +1,37 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: order-service
+
+endpoints:
+  - name: http
+    displayName: Order Service
+    visibility:
+      - project
+    port: 8080
+    type: HTTP
+    basePath: /
+
+dependencies:
+  endpoints:
+    - component: user-service
+      name: http
+      visibility: project
+      envBindings:
+        address: USER_SERVICE_URL
+  resources:
+    - ref: orders-db
+      envBindings:
+        host: DB_HOST
+        port: DB_PORT
+        username: DB_USER
+        password: DB_PASSWORD
+        database: DB_NAME
+    - ref: event-broker
+      envBindings:
+        url: NATS_URL
+
+configurations:
+  env:
+    - name: APP_ENV
+      value: development

@@ -102,6 +102,65 @@ if (workload) {
   }
 }
 
+function validateServiceWorkload(relativePath, expected) {
+  const serviceWorkload = parseYaml(relativePath);
+  if (!serviceWorkload) return;
+
+  const endpoint = serviceWorkload.endpoints?.find((item) => item.name === "http");
+  const appEnvironment = serviceWorkload.configurations?.env?.find(
+    (variable) => variable.name === "APP_ENV"
+  );
+
+  if (serviceWorkload.metadata?.name !== expected.name) {
+    failures.push(`${relativePath}: metadata.name must be ${expected.name}`);
+  }
+  if (endpoint?.port !== 8080 || endpoint?.type !== "HTTP") {
+    failures.push(`${relativePath}: http endpoint must be HTTP on port 8080`);
+  }
+  if (!endpoint?.visibility?.includes(expected.visibility)) {
+    failures.push(`${relativePath}: http endpoint must include ${expected.visibility} visibility`);
+  }
+  if (appEnvironment?.value !== "development") {
+    failures.push(`${relativePath}: APP_ENV must default to development`);
+  }
+
+  const endpointDependencies = serviceWorkload.dependencies?.endpoints || [];
+  for (const dependency of expected.endpointDependencies || []) {
+    if (!endpointDependencies.some((item) => item.component === dependency)) {
+      failures.push(`${relativePath}: missing endpoint dependency ${dependency}`);
+    }
+  }
+
+  const resourceDependencies = serviceWorkload.dependencies?.resources || [];
+  for (const dependency of expected.resourceDependencies || []) {
+    if (!resourceDependencies.some((item) => item.ref === dependency)) {
+      failures.push(`${relativePath}: missing resource dependency ${dependency}`);
+    }
+  }
+}
+
+validateServiceWorkload("workload.yaml", {
+  name: "hello-api",
+  visibility: "external",
+  endpointDependencies: ["user-service", "order-service", "notification-service"]
+});
+validateServiceWorkload("services/user-service/workload.yaml", {
+  name: "user-service",
+  visibility: "project",
+  resourceDependencies: ["users-db"]
+});
+validateServiceWorkload("services/order-service/workload.yaml", {
+  name: "order-service",
+  visibility: "project",
+  endpointDependencies: ["user-service"],
+  resourceDependencies: ["orders-db", "event-broker"]
+});
+validateServiceWorkload("services/notification-service/workload.yaml", {
+  name: "notification-service",
+  visibility: "project",
+  resourceDependencies: ["event-broker"]
+});
+
 const workflowTemplate = parseYaml("openchoreo/workflows/node-quality-gates.yaml");
 if (workflowTemplate) {
   const validateTemplate = workflowTemplate.spec?.templates?.find(

@@ -12,6 +12,24 @@ endpoints:
     type: HTTP
     basePath: /
 
+dependencies:
+  endpoints:
+    - component: user-service
+      name: http
+      visibility: project
+      envBindings:
+        address: USER_SERVICE_URL
+    - component: order-service
+      name: http
+      visibility: project
+      envBindings:
+        address: ORDER_SERVICE_URL
+    - component: notification-service
+      name: http
+      visibility: project
+      envBindings:
+        address: NOTIFICATION_SERVICE_URL
+
 configurations:
   env:
     - name: APP_ENV

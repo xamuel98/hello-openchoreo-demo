@@ -1,0 +1,28 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: user-service
+
+endpoints:
+  - name: http
+    displayName: User Service
+    visibility:
+      - project
+    port: 8080
+    type: HTTP
+    basePath: /
+
+dependencies:
+  resources:
+    - ref: users-db
+      envBindings:
+        host: DB_HOST
+        port: DB_PORT
+        username: DB_USER
+        password: DB_PASSWORD
+        database: DB_NAME
+
+configurations:
+  env:
+    - name: APP_ENV
+      value: development

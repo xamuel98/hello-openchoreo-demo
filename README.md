@@ -1,15 +1,73 @@
 # Hello API
 
-A minimal Node.js and Express API for learning source-based deployments with OpenChoreo.
+An educational OpenChoreo system demonstrating independently deployable Node.js services, synchronous HTTP dependencies, PostgreSQL resources, and asynchronous NATS events.
+
+## Architecture
+
+`hello-api` is the only externally visible component. The other application endpoints use `project` visibility, while PostgreSQL and NATS are consumed through OpenChoreo Resource outputs.
+
+```mermaid
+flowchart TD
+  Client[External client] --> API[hello-api]
+  API -->|HTTP| Users[user-service]
+  API -->|HTTP| Orders[order-service]
+  API -->|HTTP| Notifications[notification-service]
+  Orders -->|HTTP validation| Users
+  Users --> UsersDB[(users-db / PostgreSQL)]
+  Orders --> OrdersDB[(orders-db / PostgreSQL)]
+  Orders -->|orders.created| NATS[event-broker / NATS]
+  NATS --> Notifications
+```
+
+| Component | Purpose | Application path | Visibility | Dependencies |
+|---|---|---|---|---|
+| `hello-api` | External API facade | `/` | `external` | `user-service:http`, `order-service:http`, `notification-service:http` |
+| `user-service` | User persistence API | `/services/user-service` | `project` | `users-db` |
+| `order-service` | Order persistence and event publisher | `/services/order-service` | `project` | `user-service:http`, `orders-db`, `event-broker` |
+| `notification-service` | NATS consumer and demo notification store | `/services/notification-service` | `project` | `event-broker` |
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `users-db` | `postgres` | User-service database named `users` |
+| `orders-db` | `postgres` | Order-service database named `orders` |
+| `event-broker` | `nats` | Publishes and consumes `orders.created` |
+
+## API facade
+
+The root service listens on `0.0.0.0:8080`, uses Node.js built-in `fetch`, and forwards these routes:
+
+- `GET /health`
+- `POST /users`, `GET /users`, `GET /users/:id`
+- `POST /orders`, `GET /orders`, `GET /orders/:id`
+- `GET /notifications`
+
+It consumes `USER_SERVICE_URL`, `ORDER_SERVICE_URL`, and `NOTIFICATION_SERVICE_URL`. OpenChoreo resolves these values from declared endpoint dependencies; Kubernetes service addresses are never embedded in the code.
 
 ## Run locally
+
+Run the facade by itself:
 
 ```bash
 npm ci
 npm start
 ```
 
-The API listens on port `8080` by default. Override it with `PORT` and select the displayed environment with `APP_ENV`.
+Run the complete disposable Development topology with two PostgreSQL containers and NATS:
+
+```bash
+docker compose up --build -d
+curl http://localhost:8080/health
+curl -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Samuel","email":"samuel@example.com"}'
+curl -X POST http://localhost:8080/orders \
+  -H "Content-Type: application/json" \
+  -d '{"userId":1,"item":"MacBook Pro","quantity":1}'
+curl http://localhost:8080/notifications
+docker compose down
+```
+
+The credentials in `docker-compose.yml` are disposable local-development values only. OpenChoreo receives database credentials and the NATS URL from Resource dependencies.
 
 ## OpenChoreo Deployment
 
@@ -18,34 +76,31 @@ The API listens on port `8080` by default. Override it with `PORT` and select th
 | Field | Value |
 |---|---|
 | Project | `hello-world-demo` |
-| Component Name | `hello-api` |
+| Existing Component Name | `hello-api` |
 | Display Name | `Hello API` |
-| Description | Simple Node.js Hello World API for testing OpenChoreo deployments and environment-specific configuration. |
 | Component Type | `deployment/service` |
-
-### Source build configuration
-
-| Field | Value |
-|---|---|
 | Deployment method | Build from Source |
-| Repository | This repository |
+| Repository | `https://github.com/xamuel98/hello-openchoreo-demo.git` |
 | Branch | `main` |
 | Application path | `/` |
-| Build method/workflow | Dockerfile builder |
+| Build workflow | Dockerfile builder |
 | Auto deploy | Enabled |
 
-The application path is `/` because `Dockerfile`, `package.json`, `index.js`, and `workload.yaml` are all at the Git repository root.
+Create the additional components from the same repository using their application paths from the architecture table. All four source directories contain their own `Dockerfile`, `package-lock.json`, tests, and `workload.yaml`.
 
 ### Runtime configuration
 
-| Field | Value |
-|---|---|
-| Container port | `8080` |
-| Endpoint name | `http` |
-| Endpoint type | `HTTP` |
-| Base path | `/` |
-| Visibility | `external` |
-| Health endpoint | `/health` |
+Every service listens on `0.0.0.0:8080`, exposes an endpoint named `http`, and defaults `APP_ENV` to `development`. Only `hello-api` declares `external` visibility.
+
+### Resource and endpoint dependencies
+
+The source workload descriptors use OpenChoreo v1.3 dependency bindings:
+
+- Endpoint `envBindings.address` supplies complete HTTP URLs.
+- PostgreSQL outputs `host`, `port`, `username`, `password`, and `database` map to the corresponding `DB_*` variables.
+- The NATS output `url` maps to `NATS_URL`.
+
+Resource credentials are not stored in Git. Development bindings must exist and report Ready before dependent component releases can deploy.
 
 ### Environment configuration
 
@@ -55,36 +110,30 @@ The application path is `/` because `Dockerfile`, `package.json`, `index.js`, an
 | Staging/Test | `staging` |
 | Production | `production` |
 
-`development` is the default declared in `workload.yaml`. Promote the same component and build through the environments, applying `APP_ENV` values for Staging/Test and Production through OpenChoreo deployment or ReleaseBinding overrides. Do not create separate environment-specific source builds.
-
-### Container validation
-
-```bash
-docker build -t hello-api .
-docker run --rm -p 8080:8080 -e APP_ENV=development hello-api
-```
-
-After startup, `GET /` returns the service metadata and configured environment, while `GET /health` returns HTTP 200 with `{"status":"healthy"}`.
+`development` is the descriptor default. Future environments should override `APP_ENV` through OpenChoreo release bindings while preserving the same images and dependency declarations.
 
 ## Quality gates
 
-Run the same checks expected by the validated OpenChoreo workflow:
+Run the repository checks:
 
 ```bash
 npm ci
 npm run validate:ci
+npm --prefix services/user-service ci
+npm --prefix services/user-service test
+npm --prefix services/order-service ci
+npm --prefix services/order-service test
+npm --prefix services/notification-service ci
+npm --prefix services/notification-service test
 ```
 
-The validation command checks the required README, PRD, TDD, and OpenChoreo workload content before running the API tests. The tests cover the root response, `APP_ENV` overrides, and the health endpoint.
-
-The Dockerfile runs this gate in a dedicated `validation` stage. Consequently, the existing `amp-docker` build fails before producing the final image when a validation fails. The final image contains only production dependencies and `index.js`.
+Every Dockerfile has a validation stage that runs its service tests before the production stage installs only runtime dependencies. The root gate also validates the README, PRD, TDD, and all four OpenChoreo workload descriptors.
 
 | Artifact | Purpose |
 |---|---|
 | [`docs/PRD.md`](docs/PRD.md) | Product requirements and acceptance criteria |
-| [`docs/TDD.md`](docs/TDD.md) | Technical design, test strategy, and deployment design |
-| [`test/api.test.js`](test/api.test.js) | HTTP endpoint tests using Node.js's built-in test runner |
-| [`scripts/validate-docs.js`](scripts/validate-docs.js) | Required-document and workload-content validation |
-| [`openchoreo/workflows/node-quality-gates.yaml`](openchoreo/workflows/node-quality-gates.yaml) | Reusable workflow-plane quality-gate step |
+| [`docs/TDD.md`](docs/TDD.md) | Technical design and verification strategy |
+| [`docker-compose.yml`](docker-compose.yml) | Development-only end-to-end topology |
+| [`scripts/validate-docs.js`](scripts/validate-docs.js) | Documentation and workload validation |
 
-The platform installation instructions are in [`openchoreo/workflows/README.md`](openchoreo/workflows/README.md). The optional dedicated workflow step makes the quality gate separately visible in OpenChoreo. The shared `amp-docker` workflow is Helm/Flux-managed, so that step should be installed through `amp-platform-resources` and composed into a separately named workflow such as `amp-docker-node-validated`.
+The source-build workflow must support descriptor-aware workload generation for OpenChoreo to report `FROM SOURCE: Yes`. Shared workflows are platform-owned and are not modified by this repository.

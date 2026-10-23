@@ -2,16 +2,15 @@
 
 ## Architecture
 
-Hello API is a single-process Express application packaged as one OCI container. OpenChoreo builds the image, creates the Workload and ComponentRelease, and deploys the same release through the configured environment pipeline.
+The system contains an external Express facade and three independently built project-private services. OpenChoreo builds each source path, resolves endpoint and Resource dependencies, and deploys the resulting releases into the same project environment.
 
 ```text
-Git repository
-  -> OpenChoreo workflow quality gates
-  -> Docker image build and publication
-  -> Workload and ComponentRelease
-  -> Development
-  -> Staging/Test
-  -> Production
+External client -> hello-api
+  -> user-service -> users-db
+  -> order-service -> user-service
+                   -> orders-db
+                   -> event-broker -> notification-service
+  -> notification-service
 ```
 
 ## API design
@@ -47,6 +46,9 @@ Returns HTTP 200:
 |---|---|---|
 | `PORT` | `8080` | Container HTTP listening port |
 | `APP_ENV` | `development` | Environment reported by the root endpoint |
+| `USER_SERVICE_URL` | none | Resolved `user-service:http` address |
+| `ORDER_SERVICE_URL` | none | Resolved `order-service:http` address |
+| `NOTIFICATION_SERVICE_URL` | none | Resolved `notification-service:http` address |
 
 The server binds to `0.0.0.0`. OpenChoreo supplies environment-specific `APP_ENV` overrides through deployment or ReleaseBinding configuration.
 
@@ -75,17 +77,17 @@ The document validator checks that README, PRD, TDD, and workload descriptor fil
 npm run validate:ci
 ```
 
+Each internal service has its own Node test suite. Database, HTTP, and NATS boundaries are replaced with small in-memory fakes in unit tests. `docker-compose.yml` supplies the Development-only integration topology for verifying the real PostgreSQL and NATS flow.
+
 ## CI workflow design
 
 The Dockerfile validation stage makes the existing `amp-docker` workflow enforce the quality gate immediately. A non-zero exit code stops the container build, preventing image publication and deployment.
 
-The optional `node-quality-gates` ClusterWorkflowTemplate can additionally run after source checkout and before the container build. It executes `npm ci` followed by `npm run validate:ci` and exposes validation as a separate OpenChoreo workflow step.
-
-The shared `amp-docker` workflow is Helm/Flux-managed. The quality gate should be composed into a separately named component workflow rather than modifying the shared workflow directly.
+The internal-service Dockerfiles use the same validation-stage pattern. Shared OpenChoreo workflows remain platform-owned and are not modified by this project.
 
 ## Deployment and routing
 
-The repository-level `workload.yaml` declares an external HTTP endpoint on port `8080` with base path `/`. The OpenChoreo data-plane gateway generates the external HTTPRoute. The configured gateway host is the base domain `openchoreoapis.internal`; wildcard handling belongs in DNS and TLS configuration.
+The repository-level `workload.yaml` declares the sole external endpoint. Each service descriptor declares a project-private HTTP endpoint and its endpoint/Resource bindings. The platform generates Services, network policy, environment variables, and the external HTTPRoute; source code never constructs Kubernetes DNS names.
 
 ## Risks and mitigations
 
@@ -95,3 +97,5 @@ The repository-level `workload.yaml` declares an external HTTP endpoint on port 
 | Build workflow ignores `workload.yaml` | Use descriptor-aware workload generation and verify `FROM SOURCE: Yes` |
 | Documentation becomes stale | Enforce required sections in `validate:docs` |
 | Environment-specific builds drift | Promote one ComponentRelease and override `APP_ENV` per environment |
+| A database or broker starts slowly | Retry dependency initialization during service startup |
+| A downstream HTTP service is unavailable | Bound requests with timeouts and return explicit 502/504 responses |

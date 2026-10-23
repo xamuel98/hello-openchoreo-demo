@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test",
+    "test": "node --test test/api.test.js",
     "validate:docs": "node scripts/validate-docs.js",
     "validate:ci": "npm run validate:docs && npm test"
   },

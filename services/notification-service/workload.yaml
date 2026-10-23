@@ -1,0 +1,24 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: notification-service
+
+endpoints:
+  - name: http
+    displayName: Notification Service
+    visibility:
+      - project
+    port: 8080
+    type: HTTP
+    basePath: /
+
+dependencies:
+  resources:
+    - ref: event-broker
+      envBindings:
+        url: NATS_URL
+
+configurations:
+  env:
+    - name: APP_ENV
+      value: development
