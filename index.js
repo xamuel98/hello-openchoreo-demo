@@ -17,6 +17,10 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "healthy" });
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Hello API running on port ${port}`);
-});
+if (require.main === module) {
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Hello API running on port ${port}`);
+  });
+}
+
+module.exports = app;

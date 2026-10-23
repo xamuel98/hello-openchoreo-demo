@@ -1,3 +1,13 @@
+FROM node:22-alpine AS validation
+
+WORKDIR /src
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run validate:ci
+
 FROM node:22-alpine
 
 WORKDIR /app
@@ -5,7 +15,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-COPY index.js .
+COPY --from=validation /src/index.js ./
 
 EXPOSE 8080
 
