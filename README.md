@@ -102,6 +102,14 @@ The source workload descriptors use OpenChoreo v1.3 dependency bindings:
 
 Resource credentials are not stored in Git. Development bindings must exist and report Ready before dependent component releases can deploy.
 
+The project-owned resource declarations are in `openchoreo/resources.yaml`. Apply them only after confirming that the platform has the standard `postgres` and `nats` `ClusterResourceType` templates:
+
+```bash
+kubectl apply -f openchoreo/resources.yaml
+```
+
+Creating these `Resource` objects does not itself deploy infrastructure. OpenChoreo creates a `ResourceRelease`; a platform engineer or GitOps process must then create/advance one `ResourceReleaseBinding` per resource for each environment, starting with `development`. Wait for all three bindings to report `Ready` before deploying `user-service`, `order-service`, or `notification-service`.
+
 ### Environment configuration
 
 | Environment | APP_ENV |

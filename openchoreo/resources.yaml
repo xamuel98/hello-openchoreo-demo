@@ -1,0 +1,48 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Resource
+metadata:
+  name: users-db
+  namespace: default
+  annotations:
+    openchoreo.dev/display-name: Users Database
+    openchoreo.dev/description: PostgreSQL database for user-service.
+spec:
+  owner:
+    projectName: hello-world-demo
+  type:
+    kind: ClusterResourceType
+    name: postgres
+  parameters:
+    database: users
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: Resource
+metadata:
+  name: orders-db
+  namespace: default
+  annotations:
+    openchoreo.dev/display-name: Orders Database
+    openchoreo.dev/description: PostgreSQL database for order-service.
+spec:
+  owner:
+    projectName: hello-world-demo
+  type:
+    kind: ClusterResourceType
+    name: postgres
+  parameters:
+    database: orders
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: Resource
+metadata:
+  name: event-broker
+  namespace: default
+  annotations:
+    openchoreo.dev/display-name: Event Broker
+    openchoreo.dev/description: NATS broker for orders.created events.
+spec:
+  owner:
+    projectName: hello-world-demo
+  type:
+    kind: ClusterResourceType
+    name: nats
