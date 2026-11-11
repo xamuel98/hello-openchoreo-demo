@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { after, before, test } = require("node:test");
-const { createApp, createNotification, createNotificationStore } = require("../index");
+const { createApp, createNotification, createNotificationStore, createNatsOptions } = require("../index");
 
 const store = createNotificationStore();
 let server;
@@ -54,4 +54,50 @@ test("the store keeps only the newest 50 notifications", () => {
   }
   assert.equal(limitedStore.list().length, 50);
   assert.equal(limitedStore.list()[0].orderId, 55);
+});
+
+test("createNatsOptions builds authenticated NATS connection options", () => {
+  const options = createNatsOptions(
+    "nats://demo-user@nats.example.internal:4222",
+    "example-password"
+  );
+
+  assert.deepEqual(options, {
+    servers: "nats://nats.example.internal:4222",
+    user: "demo-user",
+    pass: "example-password",
+  });
+});
+
+test("createNatsOptions rejects missing NATS password", () => {
+  assert.throws(
+    () =>
+      createNatsOptions(
+        "nats://demo-user@nats.example.internal:4222",
+        ""
+      ),
+    /NATS_URL and NATS_PASSWORD are required/
+  );
+});
+
+test("createNatsOptions rejects URLs without a username", () => {
+  assert.throws(
+    () =>
+      createNatsOptions(
+        "nats://nats.example.internal:4222",
+        "example-password"
+      ),
+    /Invalid NATS connection URL/
+  );
+});
+
+test("createNatsOptions rejects URLs containing a password", () => {
+  assert.throws(
+    () =>
+      createNatsOptions(
+        "nats://demo-user:embedded-password@nats.example.internal:4222",
+        "example-password"
+      ),
+    /NATS_URL must not contain a password/
+  );
 });

@@ -88,9 +88,39 @@ function buildOrderCreatedEvent(order, now = new Date()) {
   };
 }
 
-async function connectNatsPublisher(url) {
+function createNatsOptions(connectionUrl, password) {
+  if (!connectionUrl || !password) {
+    throw new Error("NATS_URL and NATS_PASSWORD are required");
+  }
+
+  const parsed = new URL(connectionUrl);
+
+  if (parsed.protocol !== "nats:" || !parsed.username) {
+    throw new Error("Invalid NATS connection URL");
+  }
+
+  if (parsed.password) {
+    throw new Error("NATS_URL must not contain a password");
+  }
+
+  const username = decodeURIComponent(parsed.username);
+
+  parsed.username = "";
+  parsed.password = "";
+
+  return {
+    servers: parsed.toString(),
+    user: username,
+    pass: password,
+  };
+}
+
+async function connectNatsPublisher(url, password) {
   const { connect } = await import("@nats-io/transport-node");
-  const connection = await connect({ servers: url });
+
+  const options = createNatsOptions(url, password);
+  const connection = await connect(options);
+
   return {
     async publish(event) {
       connection.publish("orders.created", JSON.stringify(event));
@@ -172,13 +202,25 @@ function createApp({ repository, userClient, eventPublisher }) {
 }
 
 async function start() {
-  if (!process.env.USER_SERVICE_URL || !process.env.NATS_URL) {
-    throw new Error("USER_SERVICE_URL and NATS_URL are required");
+  if (
+    !process.env.USER_SERVICE_URL ||
+    !process.env.NATS_URL ||
+    !process.env.NATS_PASSWORD
+  ) {
+    throw new Error(
+      "USER_SERVICE_URL, NATS_URL and NATS_PASSWORD are required"
+    );
   }
 
   const repository = createOrderRepository(createPoolFromEnv());
   await retry(() => repository.initialize(), "Order database");
-  const eventPublisher = await retry(() => connectNatsPublisher(process.env.NATS_URL), "NATS");
+  const eventPublisher = await retry(
+    () => connectNatsPublisher(
+      process.env.NATS_URL,
+      process.env.NATS_PASSWORD
+    ),
+    "NATS"
+  );
   const userClient = createUserClient({ baseUrl: process.env.USER_SERVICE_URL });
   const app = createApp({ repository, userClient, eventPublisher });
   const port = process.env.PORT || 8080;
@@ -206,6 +248,7 @@ if (require.main === module) {
 module.exports = {
   buildOrderCreatedEvent,
   createApp,
+  createNatsOptions,
   createOrderRepository,
   createUserClient,
   retry

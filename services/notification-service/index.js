@@ -44,9 +44,39 @@ function createApp({ store }) {
   return app;
 }
 
-async function connectSubscriber(url, store) {
+function createNatsOptions(connectionUrl, password) {
+  if (!connectionUrl || !password) {
+    throw new Error("NATS_URL and NATS_PASSWORD are required");
+  }
+
+  const parsed = new URL(connectionUrl);
+
+  if (parsed.protocol !== "nats:" || !parsed.username) {
+    throw new Error("Invalid NATS connection URL");
+  }
+
+  if (parsed.password) {
+    throw new Error("NATS_URL must not contain a password");
+  }
+
+  const username = decodeURIComponent(parsed.username);
+
+  parsed.username = "";
+  parsed.password = "";
+
+  return {
+    servers: parsed.toString(),
+    user: username,
+    pass: password,
+  };
+}
+
+async function connectSubscriber(url, password, store) {
   const { connect } = await import("@nats-io/transport-node");
-  const connection = await connect({ servers: url });
+
+  const options = createNatsOptions(url, password);
+  const connection = await connect(options);
+
   const subscription = connection.subscribe("orders.created");
 
   (async () => {
@@ -80,9 +110,18 @@ async function retry(operation, label, { attempts = 10, delayMs = 3000 } = {}) {
 }
 
 async function start() {
-  if (!process.env.NATS_URL) throw new Error("NATS_URL is required");
+  if (!process.env.NATS_URL || !process.env.NATS_PASSWORD) {
+    throw new Error("NATS_URL and NATS_PASSWORD are required");
+  }
   const store = createNotificationStore();
-  const connection = await retry(() => connectSubscriber(process.env.NATS_URL, store), "NATS");
+  const connection = await retry(
+    () => connectSubscriber(
+      process.env.NATS_URL,
+      process.env.NATS_PASSWORD,
+      store
+    ),
+    "NATS"
+  );
   const app = createApp({ store });
   const port = process.env.PORT || 8080;
   const server = app.listen(port, "0.0.0.0", () => {
@@ -106,4 +145,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createApp, createNotification, createNotificationStore, retry };
+module.exports = { createApp, createNatsOptions, createNotification, createNotificationStore, retry };
