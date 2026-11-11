@@ -83,48 +83,46 @@ test("POST /orders publishes orders.created", async () => {
   assert.equal(published.at(-1).order.id, 1);
 });
 
-test("createNatsOptions builds authenticated NATS connection options", () => {
+test("createNatsOptions builds token-authenticated connection options", () => {
   const options = createNatsOptions(
-    "nats://demo-user@nats.example.internal:4222",
-    "example-password"
+    "nats://example-token@nats.example.internal:4222",
+    "example-token"
   );
 
   assert.deepEqual(options, {
     servers: "nats://nats.example.internal:4222",
-    user: "demo-user",
-    pass: "example-password",
+    token: "example-token"
   });
 });
 
-test("createNatsOptions rejects missing NATS password", () => {
+test("createNatsOptions rejects a missing token", () => {
   assert.throws(
-    () =>
-      createNatsOptions(
-        "nats://demo-user@nats.example.internal:4222",
-        ""
-      ),
+    () => createNatsOptions(
+      "nats://example-token@nats.example.internal:4222",
+      ""
+    ),
     /NATS_URL and NATS_PASSWORD are required/
   );
 });
 
-test("createNatsOptions rejects URLs without a username", () => {
+test("createNatsOptions rejects invalid URL protocols", () => {
   assert.throws(
-    () =>
-      createNatsOptions(
-        "nats://nats.example.internal:4222",
-        "example-password"
-      ),
+    () => createNatsOptions(
+      "https://nats.example.internal:4222",
+      "example-token"
+    ),
     /Invalid NATS connection URL/
   );
 });
 
-test("createNatsOptions rejects URLs containing a password", () => {
-  assert.throws(
-    () =>
-      createNatsOptions(
-        "nats://demo-user:embedded-password@nats.example.internal:4222",
-        "example-password"
-      ),
-    /NATS_URL must not contain a password/
+test("createNatsOptions removes embedded credentials", () => {
+  const options = createNatsOptions(
+    "nats://username:embedded-secret@nats.example.internal:4222",
+    "actual-token"
   );
+
+  assert.deepEqual(options, {
+    servers: "nats://nats.example.internal:4222",
+    token: "actual-token"
+  });
 });

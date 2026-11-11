@@ -88,30 +88,25 @@ function buildOrderCreatedEvent(order, now = new Date()) {
   };
 }
 
-function createNatsOptions(connectionUrl, password) {
-  if (!connectionUrl || !password) {
+function createNatsOptions(connectionUrl, token) {
+  if (!connectionUrl || !token) {
     throw new Error("NATS_URL and NATS_PASSWORD are required");
   }
 
   const parsed = new URL(connectionUrl);
 
-  if (parsed.protocol !== "nats:" || !parsed.username) {
+  if (parsed.protocol !== "nats:" || !parsed.hostname) {
     throw new Error("Invalid NATS connection URL");
   }
 
-  if (parsed.password) {
-    throw new Error("NATS_URL must not contain a password");
-  }
-
-  const username = decodeURIComponent(parsed.username);
-
+  // Token authentication: credentials must not be embedded
+  // in the server address passed to the NATS client.
   parsed.username = "";
   parsed.password = "";
 
   return {
     servers: parsed.toString(),
-    user: username,
-    pass: password,
+    token
   };
 }
 

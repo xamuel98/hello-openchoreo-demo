@@ -44,39 +44,32 @@ function createApp({ store }) {
   return app;
 }
 
-function createNatsOptions(connectionUrl, password) {
-  if (!connectionUrl || !password) {
+function createNatsOptions(connectionUrl, token) {
+  if (!connectionUrl || !token) {
     throw new Error("NATS_URL and NATS_PASSWORD are required");
   }
 
   const parsed = new URL(connectionUrl);
 
-  if (parsed.protocol !== "nats:" || !parsed.username) {
+  if (parsed.protocol !== "nats:" || !parsed.hostname) {
     throw new Error("Invalid NATS connection URL");
   }
 
-  if (parsed.password) {
-    throw new Error("NATS_URL must not contain a password");
-  }
-
-  const username = decodeURIComponent(parsed.username);
-
+  // Token authentication: credentials must not be embedded
+  // in the server address passed to the NATS client.
   parsed.username = "";
   parsed.password = "";
 
   return {
     servers: parsed.toString(),
-    user: username,
-    pass: password,
+    token
   };
 }
 
-async function connectSubscriber(url, password, store) {
+async function connectSubscriber(url, token, store) {
   const { connect } = await import("@nats-io/transport-node");
 
-  const options = createNatsOptions(url, password);
-  const connection = await connect(options);
-
+  const connection = await connect(createNatsOptions(url, token));
   const subscription = connection.subscribe("orders.created");
 
   (async () => {
